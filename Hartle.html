@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>HARTLE V9.1</title>
+<style>
+body { font-family: "Arial Black", sans-serif; background-color: #121213; color: white; text-align: center; position: relative; }
+h1 { letter-spacing: 6px; }
+input { padding: 8px; margin: 10px; width: 200px; }
+button { padding: 8px 12px; margin: 5px; cursor: pointer; }
+#board { margin-top: 20px; display: grid; grid-template-columns: repeat(7, 120px); grid-gap: 5px; justify-content: center; }
+.tile { width: 120px; height: 50px; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 14px; border-radius: 6px; background-color: #3a3a3c; text-transform: uppercase; }
+.correct { background-color: #538d4e; }
+.error { color: red; }
+.autocomplete-box { width: 200px; margin: 0 auto; background: #2c2c2c; border-radius: 5px; max-height: 150px; overflow-y: auto; position: relative; z-index: 100; }
+.suggestion { padding: 8px; cursor: pointer; }
+.suggestion:hover { background-color: #444; }
+#versionNote { position: absolute; bottom: 5px; right: 10px; font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+
+<h1>HARTLE</h1>
+<h3>Guess The Person</h3>
+<input id="nameGuess" placeholder="Enter Name" oninput="showSuggestions()">
+<div id="suggestions" class="autocomplete-box"></div>
+<br>
+<button onclick="makeGuess()">Submit Guess</button>
+<button onclick="revealPerson()">Reveal</button>
+<button onclick="refreshGame()">Refresh</button>
+<div id="error" class="error"></div>
+<div id="result"></div>
+<div id="board"></div>
+<div id="versionNote">V9.1</div>
+
+<script>
+let people = [];
+let secret = null;
+let guesses = 0;
+let maxGuesses = 6;
+let boardTiles = [];
+
+/* Initialize board grid */
+function initBoard(){
+    board.innerHTML="";
+    boardTiles=[];
+    for(let i=0;i<maxGuesses;i++){
+        let row=[];
+        for(let j=0;j<7;j++){
+            const tile=document.createElement("div");
+            tile.className="tile";
+            board.appendChild(tile);
+            row.push(tile);
+        }
+        boardTiles.push(row);
+    }
+}
+
+/* Load Google Sheet Data */
+function loadSheet() {
+  const url = "https://sheets.googleapis.com/v4/spreadsheets/16DPcxgV8kOvN5YHG1vm7K3oFDgqqIugkwl67K_Wp68o/values/Sheet1?key=AIzaSyABMi6gzPPF7GIcruXyjkyxmCKC1Er5IeA";
+
+  fetch(url)
+    .then(response => response.json())
+    .then(data => {
+
+      if (!data.values || data.values.length < 2) {
+        console.error("Sheet is empty or formatted incorrectly.");
+        return;
+      }
+
+      const rows = data.values;
+
+      // Skip header row
+      people = rows.slice(1).map(row => ({
+        name: row[0] || "",
+        alignment: row[1] || "Neutral",
+        height: row[2] || "Under 6'",
+        hair: row[3] || "Blonde",
+        grade: row[4] || "7",
+        intelligence: row[5] || "1",
+        style: row[6] || "Average"
+      }));
+
+      if (people.length === 0) {
+        console.error("No players found in sheet.");
+        return;
+      }
+
+      secret = people[Math.floor(Math.random() * people.length)];
+      guesses = 0;
+      initBoard();
+
+      console.log("Sheet loaded successfully:", people);
+
+    })
+    .catch(error => {
+      console.error("Error loading sheet:", error);
+    });
+}
+/* Autocomplete */
+function showSuggestions(){
+    const input=nameGuess.value.toLowerCase();
+    suggestions.innerHTML="";
+    if(input==="") return;
+    const matches=people.filter(p=>p.name.toLowerCase().includes(input));
+    matches.forEach(p=>{
+        const div=document.createElement("div");
+        div.className="suggestion";
+        div.textContent=p.name;
+        div.onclick=function(){ nameGuess.value=p.name; suggestions.innerHTML=""; };
+        suggestions.appendChild(div);
+    });
+}
+
+/* Find person by name */
+function findPersonByName(name){ return people.find(p=>p.name.toLowerCase()===name.toLowerCase()); }
+
+/* Make guess */
+function makeGuess(){
+    if(!secret) return;
+    if(guesses>=maxGuesses) return;
+    error.innerHTML=""; suggestions.innerHTML="";
+    const guessName = nameGuess.value.trim();
+    const guessed = findPersonByName(guessName);
+    if(!guessed){ error.innerHTML="Name not found in database."; return; }
+
+    const categories = ["name","alignment","height","hair","grade","intelligence","style"];
+    const values = [guessed.name, guessed.alignment, guessed.height, guessed.hair, guessed.grade, guessed.intelligence, guessed.style];
+
+    for(let j=0;j<7;j++){
+        const tile = boardTiles[guesses][j];
+        tile.textContent = values[j];
+        if(j>0 && values[j]===secret[categories[j]]) tile.classList.add("correct");
+    }
+
+    guesses++;
+    if(guessed.name===secret.name){
+        result.innerHTML=`🎉 Correct! It took ${guesses} attempt${guesses>1?'s':''}.`;
+    } else if(guesses===maxGuesses){
+        result.innerHTML=`Game Over! It was ${secret.name}.`;
+    }
+
+    nameGuess.value="";
+}
+
+/* Reveal */
+function revealPerson(){ if(secret) result.innerHTML="🔓 Secret Person: "+secret.name; }
+
+/* Refresh */
+function refreshGame(){ 
+    if(people.length>0){
+        secret = people[Math.floor(Math.random()*people.length)];
+        guesses = 0;
+        result.innerHTML="";
+        error.innerHTML="";
+        nameGuess.value="";
+        initBoard();
+    }
+}
+
+/* Initialize app */
+loadSheet();
+</script>
+</body>
+</html>
